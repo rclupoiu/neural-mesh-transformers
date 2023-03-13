@@ -57,7 +57,30 @@ for i in range(dataset_size):
     #Extract the neuron indices from the edge connections
     neuron_indices = np.unique(edges[0])
 
-    node_attr = torch.tensor(neuron_data[neuron_indices,curr_frame-frame_window:curr_frame+1], dtype=torch.float)
+    complete_neuron_indices = np.arange(neuron_indices.max())
+
+
+
+    #Find the values in complete_neuron_indices that are not in neuron_indices
+    #missing_neuron_indices = np.setdiff1d(complete_neuron_indices, neuron_indices)
+
+    #Construct the node attributes to contain nan values for the missing neurons
+    node_attr = torch.empty((complete_neuron_indices.shape[0]+1, frame_window+1), dtype=torch.float)
+    node_attr[:] = torch.nan
+    node_attr[neuron_indices] = torch.tensor(neuron_data[neuron_indices,curr_frame-frame_window:curr_frame+1], dtype=torch.float)
+
+    #Check if there are any nan in the location where there should be a neuron
+    if(torch.isnan(node_attr[neuron_indices]).any()):
+        print("WARNING: Indexing error; message passing will include nan values")
+
+    if(torch.isnan(node_attr[edge_index[0]]).any()):
+        print("WARNING: Indexing error; message passing will include nan values")
+
+    if(torch.isnan(node_attr[edge_index[1]]).any()):
+        print("WARNING: Indexing error; message passing will include nan values")
+
+
+
 
     #Define the graph label as the current frame's direction of the pupil in the x direction
     #If the x coordinate of the pupil is less than 75, the direction is left, denoted by 0
@@ -65,11 +88,11 @@ for i in range(dataset_size):
 
     curr_x_coord = pupil_x_coords[curr_frame]
     if(curr_x_coord < 75):
-        graph_label = torch.tensor([0], dtype=torch.long).unsqueeze(-1)
+        graph_label = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
     elif(curr_x_coord > 85):
-        graph_label = torch.tensor([1], dtype=torch.long).unsqueeze(-1)
+        graph_label = torch.tensor([1], dtype=torch.float).unsqueeze(-1)
     else:
-        graph_label = torch.tensor([-1], dtype=torch.long).unsqueeze(-1)
+        graph_label = torch.tensor([-1], dtype=torch.float).unsqueeze(-1)
         print("WARNING: Pupil located in the middle")
 
     data_list.append(Data(x=node_attr, edge_index=edge_index, edge_attr=edge_attr, y=graph_label))

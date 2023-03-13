@@ -42,8 +42,11 @@ class ProcessorLayer(MessagePassing):
         #edge_attr is the edge features
 
         #Calculate the edge messages
-        import pdb; pdb.set_trace()
         out = self.propagate(edge_index, x=x, edge_attr=edge_attr, size=size) #shape: [num_edges, out_channels]
+
+        #Catch if any nan values are present in the edge messages
+        if(torch.isnan(out).any()):
+            print("WARNING: Nan values present in edge messages")
 
         #Calculate the node messages using aggregated messages and self embedding
         out = self.node_nlp(torch.cat([x, out], dim=1))
@@ -66,9 +69,7 @@ class ProcessorLayer(MessagePassing):
         node_dim = 0
 
         #Aggregate the edge messages
-        import pdb; pdb.set_trace()
         out = torch_scatter.scatter(out, edge_index[0, :], dim=node_dim, reduce='mean')
-        import pdb; pdb.set_trace()
         return out
 
 
@@ -106,10 +107,10 @@ class neuralGNN(torch.nn.Module):
 
         #Define the supernode NLP
         self.supernode_mlp = Sequential(Linear(self.num_supernodes, self.super_nlp_hidden_dim_1),
-                                        BatchNorm1d(self.super_nlp_hidden_dim_1),
+                                        #BatchNorm1d(self.super_nlp_hidden_dim_1),
                                         ReLU(),
                                         Linear(self.super_nlp_hidden_dim_1, self.super_nlp_hidden_dim_2),
-                                        BatchNorm1d(self.super_nlp_hidden_dim_2),
+                                        #BatchNorm1d(self.super_nlp_hidden_dim_2),
                                         ReLU(),
                                         Linear(self.super_nlp_hidden_dim_2, 1),
                                         Softmax(dim=1))
@@ -118,7 +119,7 @@ class neuralGNN(torch.nn.Module):
     def buildProcessorModel(self):
         return ProcessorLayer
 
-    def forward(self, data, supernode_indices):
+    def forward(self, data, supernode_indices, real_neuron_indices, device):
         x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
 
         #Step 1: Process the graph
@@ -126,13 +127,22 @@ class neuralGNN(torch.nn.Module):
             x = self.processor[i](x=x, edge_index=edge_index, edge_attr=edge_attr)
 
         #Step 2: Time compression
-        x = self.time_compress_mlp(x)
+        #x = self.time_compress_mlp(x)
+        time_compressed_x = torch.zeros(x.shape[0], 1).to(device)
+        time_compressed_x[:] = torch.nan
+        time_compressed_x[real_neuron_indices] = self.time_compress_mlp(x[real_neuron_indices])
+
+        if(torch.isnan(time_compressed_x).any()):
+            print("WARNING: Nan values present in time compressed features")
 
         #Step 3: Supernode aggregation
-        import pdb; pdb.set_trace()
         #NOTE: Check that the supernodes are concatenated into a vector for processing by the supernode mlp
-        supernodes = x[supernode_indices]
-        pred = self.supernode_mlp(supernodes)
+        supernodes = time_compressed_x[supernode_indices]
+
+        if(torch.isnan(supernodes).any()):
+            print("WARNING: Nan values present in time compressed features")
+
+        pred = self.supernode_mlp(supernodes.T)
 
         return pred
 
@@ -165,21 +175,6 @@ def train(dataset, device, args):
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    #Build the model
-    model = neuralGNN(time_window_size=args.time_window_size,
-                      proc_nlp_hidden_dim=args.proc_nlp_hidden_dim,
-                      time_nlp_hidden_dim=args.time_nlp_hidden_dim,
-                      num_supernodes=args.num_supernodes,
-                      super_nlp_hidden_dim_1=args.super_nlp_hidden_dim_1,
-                      super_nlp_hidden_dim_2=args.super_nlp_hidden_dim_2,
-                      num_layers=args.num_layers).to(device)
-
-    #Build the optimizer
-    scheduler, optimizer = build_optimizer(args, model.parameters())
-
-    #Build the loss function
-    loss_fn = nn.NLLLoss()
-
     #Build the data loader
     #data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
     data = dataset.to(device)
@@ -192,7 +187,27 @@ def train(dataset, device, args):
     #remove duplicate nodes
     supernode_indices = np.unique(supernode_indices.cpu().numpy())
 
-    print("Number of supernodes: %d" % len(supernode_indices))
+    final_num_supernodes = len(supernode_indices)
+
+    print("Number of supernodes: %d" % final_num_supernodes)
+
+
+
+    #Build the model
+    model = neuralGNN(time_window_size=args.time_window_size,
+                      proc_nlp_hidden_dim=args.proc_nlp_hidden_dim,
+                      time_nlp_hidden_dim=args.time_nlp_hidden_dim,
+                      num_supernodes=final_num_supernodes,
+                      super_nlp_hidden_dim_1=args.super_nlp_hidden_dim_1,
+                      super_nlp_hidden_dim_2=args.super_nlp_hidden_dim_2,
+                      num_layers=args.num_layers).to(device)
+
+    #Build the optimizer
+    scheduler, optimizer = build_optimizer(args, model.parameters())
+
+    #Build the loss function
+    #loss_fn = nn.NLLLoss()
+    loss_fn = nn.BCELoss()
 
 
     #Train the model
@@ -202,7 +217,8 @@ def train(dataset, device, args):
         #for data in data_loader:
         #data = data.to(device)
         optimizer.zero_grad()
-        out = model(data, supernode_indices)
+        real_neuron_indices = torch.unique(data.edge_index[0,:])
+        out = model(data, supernode_indices, real_neuron_indices, device)
         loss = loss_fn(out, data.y)
         loss.backward()
         optimizer.step()
@@ -243,7 +259,7 @@ for args in [
 dataset = torch.load('/workspace/data_gen/pupil_direction_graphs.pt')[0]
 
 #device = 'cuda' if torch.cuda.is_available() else 'cpu'
-device = 'cpu'
+device = 'cuda'
 args.device = device
 print("device in use: {}".format(device))
 
