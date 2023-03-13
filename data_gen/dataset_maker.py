@@ -28,12 +28,32 @@ corr_matrix[corr_matrix < np.percentile(corr_matrix, 99)] = 0
 
 
 
+
+
+#Find the columns of the correlation matrix that have at least one nonzero value
+nonzero_cols = np.where(corr_matrix.sum(axis=0) > 0)[0]
+
+#Find the rows of the correlation matrix that have at least one nonzero value
+nonzero_rows = np.where(corr_matrix.sum(axis=1) > 0)[0]
+
+#Filter the neuron data to only include the neurons that have at least one nonzero correlation
+compressed_neuron_data = neuron_data[nonzero_cols]
+
+#Convert the correlation matrix to remove the rows and columns that are all zeros
+compressed_corr_matrix = corr_matrix[nonzero_cols][:, nonzero_cols]
+
+
+
+
+
+
+
 #Convert the correlation matrix to a list of graph edge connections in COO format
-edges = np.nonzero(corr_matrix)
+edges = np.nonzero(compressed_corr_matrix)
 edge_index = torch.tensor(np.array([edges[0], edges[1]]), dtype=torch.long)
 
 #Define the edge attributes as the correlation values between the neurons
-edge_attr = torch.tensor(corr_matrix[edges], dtype=torch.float).unsqueeze(-1)
+edge_attr = torch.tensor(compressed_corr_matrix[edges], dtype=torch.float).unsqueeze(-1)
 
 
 
@@ -52,35 +72,9 @@ for i in range(dataset_size):
     eligible_frames = np.where((pupil_x_coords < 75) | (pupil_x_coords > 85))[0]
     eligible_frames = eligible_frames[eligible_frames > frame_window]
 
-    curr_frame = eligible_frames[i]
+    curr_frame = eligible_frames[0]
 
-    #Extract the neuron indices from the edge connections
-    neuron_indices = np.unique(edges[0])
-
-    complete_neuron_indices = np.arange(neuron_indices.max())
-
-
-
-    #Find the values in complete_neuron_indices that are not in neuron_indices
-    #missing_neuron_indices = np.setdiff1d(complete_neuron_indices, neuron_indices)
-
-    #Construct the node attributes to contain nan values for the missing neurons
-    node_attr = torch.empty((complete_neuron_indices.shape[0]+1, frame_window+1), dtype=torch.float)
-    node_attr[:] = torch.nan
-    node_attr[neuron_indices] = torch.tensor(neuron_data[neuron_indices,curr_frame-frame_window:curr_frame+1], dtype=torch.float)
-
-    #Check if there are any nan in the location where there should be a neuron
-    if(torch.isnan(node_attr[neuron_indices]).any()):
-        print("WARNING: Indexing error; message passing will include nan values")
-
-    if(torch.isnan(node_attr[edge_index[0]]).any()):
-        print("WARNING: Indexing error; message passing will include nan values")
-
-    if(torch.isnan(node_attr[edge_index[1]]).any()):
-        print("WARNING: Indexing error; message passing will include nan values")
-
-
-
+    node_attr = torch.tensor(compressed_neuron_data[:,curr_frame-frame_window:curr_frame+1], dtype=torch.float)
 
     #Define the graph label as the current frame's direction of the pupil in the x direction
     #If the x coordinate of the pupil is less than 75, the direction is left, denoted by 0

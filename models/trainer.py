@@ -44,10 +44,6 @@ class ProcessorLayer(MessagePassing):
         #Calculate the edge messages
         out = self.propagate(edge_index, x=x, edge_attr=edge_attr, size=size) #shape: [num_edges, out_channels]
 
-        #Catch if any nan values are present in the edge messages
-        if(torch.isnan(out).any()):
-            print("WARNING: Nan values present in edge messages")
-
         #Calculate the node messages using aggregated messages and self embedding
         out = self.node_nlp(torch.cat([x, out], dim=1))
 
@@ -119,7 +115,7 @@ class neuralGNN(torch.nn.Module):
     def buildProcessorModel(self):
         return ProcessorLayer
 
-    def forward(self, data, supernode_indices, real_neuron_indices, device):
+    def forward(self, data, supernode_indices):
         x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
 
         #Step 1: Process the graph
@@ -127,20 +123,11 @@ class neuralGNN(torch.nn.Module):
             x = self.processor[i](x=x, edge_index=edge_index, edge_attr=edge_attr)
 
         #Step 2: Time compression
-        #x = self.time_compress_mlp(x)
-        time_compressed_x = torch.zeros(x.shape[0], 1).to(device)
-        time_compressed_x[:] = torch.nan
-        time_compressed_x[real_neuron_indices] = self.time_compress_mlp(x[real_neuron_indices])
-
-        if(torch.isnan(time_compressed_x).any()):
-            print("WARNING: Nan values present in time compressed features")
+        x = self.time_compress_mlp(x)
 
         #Step 3: Supernode aggregation
         #NOTE: Check that the supernodes are concatenated into a vector for processing by the supernode mlp
-        supernodes = time_compressed_x[supernode_indices]
-
-        if(torch.isnan(supernodes).any()):
-            print("WARNING: Nan values present in time compressed features")
+        supernodes = x[supernode_indices]
 
         pred = self.supernode_mlp(supernodes.T)
 
@@ -207,7 +194,7 @@ def train(dataset, device, args):
 
     #Build the loss function
     #loss_fn = nn.NLLLoss()
-    loss_fn = nn.BCELoss()
+    loss_fn = nn.MSELoss()
 
 
     #Train the model
@@ -217,8 +204,7 @@ def train(dataset, device, args):
         #for data in data_loader:
         #data = data.to(device)
         optimizer.zero_grad()
-        real_neuron_indices = torch.unique(data.edge_index[0,:])
-        out = model(data, supernode_indices, real_neuron_indices, device)
+        out = model(data, supernode_indices)
         loss = loss_fn(out, data.y)
         loss.backward()
         optimizer.step()
@@ -258,6 +244,12 @@ for args in [
 
 dataset = torch.load('/workspace/data_gen/pupil_direction_graphs.pt')[0]
 
+dataset.y = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
+# for i, data in enumerate(dataset):
+#     print(data.y.item())
+#     # if(np.isclose(data.y.item(), 0.0)):
+#     #     print("Index: %d" % i)
+# import pdb;pdb.set_trace()
 #device = 'cuda' if torch.cuda.is_available() else 'cpu'
 device = 'cuda'
 args.device = device
