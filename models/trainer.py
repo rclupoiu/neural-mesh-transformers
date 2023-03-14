@@ -11,6 +11,7 @@ import torch.nn as nn
 from torch.nn import Linear, Sequential, LayerNorm, ReLU, BatchNorm1d, Softmax
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.loader import DataLoader
+import torch.nn.functional as F
 
 import torch.optim as optim
 from tqdm import trange
@@ -108,8 +109,7 @@ class neuralGNN(torch.nn.Module):
                                         Linear(self.super_nlp_hidden_dim_1, self.super_nlp_hidden_dim_2),
                                         #BatchNorm1d(self.super_nlp_hidden_dim_2),
                                         ReLU(),
-                                        Linear(self.super_nlp_hidden_dim_2, 1),
-                                        Softmax(dim=1))
+                                        Linear(self.super_nlp_hidden_dim_2, 1))
 
 
     def buildProcessorModel(self):
@@ -130,6 +130,8 @@ class neuralGNN(torch.nn.Module):
         supernodes = x[supernode_indices]
 
         pred = self.supernode_mlp(supernodes.T)
+
+        pred = F.sigmoid(pred)
 
         return pred
 
@@ -244,7 +246,7 @@ for args in [
 
 dataset = torch.load('/workspace/data_gen/pupil_direction_graphs.pt')[0]
 
-dataset.y = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
+#dataset.y = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
 # for i, data in enumerate(dataset):
 #     print(data.y.item())
 #     # if(np.isclose(data.y.item(), 0.0)):
