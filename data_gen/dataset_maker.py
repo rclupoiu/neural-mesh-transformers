@@ -62,29 +62,38 @@ edge_attr = torch.tensor(compressed_corr_matrix[edges], dtype=torch.float).unsqu
 dataset_size = 1000
 data_list = []
 
+left_coord_threshold = 70
+right_coord_threshold = 85
+
+#Define the node attributes as a vector containing the neuron's data for 20 preceding frames, including the current frame
+frame_window = 20
+
+#Find the frames where the pupil is looking either to the left or right and is greater than 20 frames from the beginning of the recording
+eligible_frames = np.where((pupil_x_coords < left_coord_threshold) | (pupil_x_coords > right_coord_threshold))[0]
+eligible_frames = eligible_frames[eligible_frames > frame_window]
+
 print("Collecting Data...")
 
+num_left = 0
+num_right = 0
+
 for i in range(dataset_size):
-    #Define the node attributes as a vector containing the neuron's data for 20 preceding frames, including the current frame
-    frame_window = 20
 
-    #Find the frames where the pupil is looking either to the left or right and is greater than 20 frames from the beginning of the recording
-    eligible_frames = np.where((pupil_x_coords < 75) | (pupil_x_coords > 85))[0]
-    eligible_frames = eligible_frames[eligible_frames > frame_window]
-
-    curr_frame = eligible_frames[0]
+    curr_frame = eligible_frames[i]
 
     node_attr = torch.tensor(compressed_neuron_data[:,curr_frame-frame_window:curr_frame+1], dtype=torch.float)
 
     #Define the graph label as the current frame's direction of the pupil in the x direction
-    #If the x coordinate of the pupil is less than 75, the direction is left, denoted by 0
-    #If the x coordinate of the pupil is greater than 85, the direction is right, denoted by 1
+    #If the x coordinate of the pupil is less than left_coord_threshold, the direction is left, denoted by 0
+    #If the x coordinate of the pupil is greater than right_coord_threshold, the direction is right, denoted by 1
 
     curr_x_coord = pupil_x_coords[curr_frame]
-    if(curr_x_coord < 75):
+    if(curr_x_coord < left_coord_threshold):
         graph_label = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
-    elif(curr_x_coord > 85):
+        num_left += 1
+    elif(curr_x_coord > right_coord_threshold):
         graph_label = torch.tensor([1], dtype=torch.float).unsqueeze(-1)
+        num_right += 1
     else:
         graph_label = torch.tensor([-1], dtype=torch.float).unsqueeze(-1)
         print("WARNING: Pupil located in the middle")
@@ -96,3 +105,6 @@ print("Saving Data...")
 torch.save(data_list, 'pupil_direction_graphs.pt')
 
 print("Done Saving Data!")
+
+print("Number of left: " + str(num_left))
+print("Number of right: " + str(num_right))
