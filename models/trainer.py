@@ -269,7 +269,7 @@ for args in [
         'super_nlp_hidden_dim_2': 32,
         'num_layers': 5,
         'batch_size':25,
-        'epochs': 1000,
+        'epochs': 100,
         'opt': 'adam',
         'opt_scheduler': 'none',
         'lr': 0.001,
