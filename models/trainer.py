@@ -17,6 +17,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import trange
 
+import args
+
 
 #Define the processor layer, which does the message passing
 class ProcessorLayer(MessagePassing):
@@ -192,7 +194,7 @@ def train(dataset, supernode_indices, device, args):
     model = neuralGNN(time_window_size=args.time_window_size,
                       proc_nlp_hidden_dim=args.proc_nlp_hidden_dim,
                       time_nlp_hidden_dim=args.time_nlp_hidden_dim,
-                      num_supernodes=final_num_supernodes,
+                      num_supernodes=len(supernode_indices),
                       super_nlp_hidden_dim_1=args.super_nlp_hidden_dim_1,
                       super_nlp_hidden_dim_2=args.super_nlp_hidden_dim_2,
                       num_layers=args.num_layers).to(device)
@@ -261,62 +263,64 @@ def train(dataset, supernode_indices, device, args):
             best_loss = test_loss/test_num_batches
             torch.save(model.state_dict(), 'model_amsgrad2.pt')
 
-
 class objectview(object):
-    def __init__(self, d):
-        self.__dict__ = d
+        def __init__(self, d):
+            self.__dict__ = d
 
-for args in [
-        {
-        'time_window_size': 21,
-        'proc_nlp_hidden_dim': 32,
-        'time_nlp_hidden_dim': 32,
-        'num_supernodes': 500,
-        'super_nlp_hidden_dim_1': 128,
-        'super_nlp_hidden_dim_2': 32,
-        'num_layers': 5,
-        'batch_size':25,
-        'epochs': 500,
-        'opt': 'adam',
-        'opt_scheduler': 'none',
-        'lr': 0.001,
-        'device': 'cuda',
-        'seed': 42,
-        'weight_decay': 0.0005,
-        'train_ratio': 0.8
-        },
-    ]:
-        args = objectview(args)
+if __name__ == '__main__':
+
+    for args in [
+            {
+            'time_window_size': args.time_window_size,
+            'proc_nlp_hidden_dim': args.proc_nlp_hidden_dim,
+            'time_nlp_hidden_dim': args.time_nlp_hidden_dim,
+            'num_supernodes': args.num_supernodes,
+            'super_nlp_hidden_dim_1': args.super_nlp_hidden_dim_1,
+            'super_nlp_hidden_dim_2': args.super_nlp_hidden_dim_2,
+            'num_layers': args.num_layers,
+            'batch_size':args.batch_size,
+            'epochs': args.epochs,
+            'opt': args.opt,
+            'opt_scheduler': args.opt_scheduler,
+            'lr': args.lr,
+            'device': args.device,
+            'seed': args.seed,
+            'weight_decay': args.weight_decay,
+            'train_ratio': args.train_ratio
+            },
+        ]:
+            args = objectview(args)
+
+    dataset = torch.load('/workspace/data_gen/pupil_xcoord_graphs.pt')
+
+    first_graph = dataset[0]
+
+    #Find the supernode indices
+    random_indices = np.random.choice(first_graph.edge_index.shape[-1], size=args.num_supernodes, replace=False)
+    supernode_indices = first_graph.edge_index[0,random_indices]
+
+    #remove duplicate nodes
+    supernode_indices = np.unique(supernode_indices.cpu().numpy())
+
+    final_num_supernodes = len(supernode_indices)
+
+    print("Number of supernodes: %d" % final_num_supernodes)
+
+    #Save the supernode indices
+    np.save('supernode_indices_amsgrad2.npy', supernode_indices)
+
+    #dataset.y = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
+    # for i, data in enumerate(dataset):
+    #     print(data.y.item())
+    #     # if(np.isclose(data.y.item(), 0.0)):
+    #     #     print("Index: %d" % i)
+    # import pdb;pdb.set_trace()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    args.device = device
+    print("device in use: {}".format(device))
 
 
 
-dataset = torch.load('/workspace/data_gen/pupil_xcoord_graphs.pt')
 
-first_graph = dataset[0]
-
-#Find the supernode indices
-random_indices = np.random.choice(first_graph.edge_index.shape[-1], size=args.num_supernodes, replace=False)
-supernode_indices = first_graph.edge_index[0,random_indices]
-
-#remove duplicate nodes
-supernode_indices = np.unique(supernode_indices.cpu().numpy())
-
-final_num_supernodes = len(supernode_indices)
-
-print("Number of supernodes: %d" % final_num_supernodes)
-
-#dataset.y = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
-# for i, data in enumerate(dataset):
-#     print(data.y.item())
-#     # if(np.isclose(data.y.item(), 0.0)):
-#     #     print("Index: %d" % i)
-# import pdb;pdb.set_trace()
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-args.device = device
-print("device in use: {}".format(device))
-
-
-
-
-#Train the model
-train(dataset, supernode_indices, device, args)
+    #Train the model
+    train(dataset, supernode_indices, device, args)

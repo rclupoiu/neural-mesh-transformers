@@ -1,0 +1,16 @@
+time_window_size= 21
+proc_nlp_hidden_dim=32
+time_nlp_hidden_dim=32
+num_supernodes= 500
+super_nlp_hidden_dim_1= 128
+super_nlp_hidden_dim_2= 32
+num_layers= 5
+batch_size=25
+epochs= 500
+opt= 'adam'
+opt_scheduler= 'none'
+lr= 0.001
+device= 'cuda'
+seed= 42
+weight_decay= 0.0005
+train_ratio= 0.8
