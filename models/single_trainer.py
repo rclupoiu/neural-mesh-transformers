@@ -99,16 +99,16 @@ class neuralGNN(torch.nn.Module):
 
         #Define the time compression NLP
         self.time_compress_mlp = Sequential(Linear(self.time_window_size, self.time_nlp_hidden_dim),
-                                            BatchNorm1d(self.time_nlp_hidden_dim),
+                                            #BatchNorm1d(self.time_nlp_hidden_dim),
                                             LeakyReLU(),
                                             Linear(self.time_nlp_hidden_dim, 1))
 
         #Define the supernode NLP
         self.supernode_mlp = Sequential(Linear(self.num_supernodes, self.super_nlp_hidden_dim_1),
-                                        BatchNorm1d(self.super_nlp_hidden_dim_1),
+                                        #BatchNorm1d(self.super_nlp_hidden_dim_1),
                                         LeakyReLU(),
                                         Linear(self.super_nlp_hidden_dim_1, self.super_nlp_hidden_dim_2),
-                                        BatchNorm1d(self.super_nlp_hidden_dim_2),
+                                        #BatchNorm1d(self.super_nlp_hidden_dim_2),
                                         LeakyReLU(),
                                         Linear(self.super_nlp_hidden_dim_2, 1))
 
@@ -117,7 +117,7 @@ class neuralGNN(torch.nn.Module):
         return ProcessorLayer
 
     def forward(self, data, supernode_indices, device):
-        x, edge_index, edge_attr, batch_mask = data.x, data.edge_index, data.edge_attr, data.batch
+        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
 
         #Step 1: Process the graph
         for i in range(self.num_layers):
@@ -126,21 +126,20 @@ class neuralGNN(torch.nn.Module):
         #Step 2: Time compression
         x = self.time_compress_mlp(x)
 
-        batch_size = batch_mask[-1].item() + 1
-        num_nodes_per_batch = torch.zeros((batch_size))
+        batch_size = 1#batch_mask[-1].item() + 1
+        #num_nodes_per_batch = torch.zeros((batch_size))
         #Count the number of nodes in each batch and ensure they are equal
-        for i in range(batch_size):
-            num_nodes_per_batch[i] = torch.sum(batch_mask == i)
-        assert torch.all(num_nodes_per_batch == num_nodes_per_batch[0])
+        # for i in range(batch_size):
+        #     num_nodes_per_batch[i] = torch.sum(batch_mask == i)
+        # assert torch.all(num_nodes_per_batch == num_nodes_per_batch[0])
 
         #Reshape the time compressed node features into a 2D tensor
-        x = x.reshape((int(batch_size), int(num_nodes_per_batch[0])))
+        x = x.T#x.reshape((int(batch_size), int(num_nodes_per_batch[0])))
 
         #Step 3: Supernode aggregation
         #NOTE: Check that the supernodes are concatenated into a vector for processing by the supernode mlp
         supernodes = x[:, supernode_indices]
 
-        #import pdb; pdb.set_trace()
         pred = self.supernode_mlp(supernodes)
 
         #Apply sigmoid for binary classification
@@ -154,7 +153,7 @@ def build_optimizer(args, params):
     weight_decay = args.weight_decay
     filter_fn = filter(lambda p : p.requires_grad, params)
     if args.opt == 'adam':
-        optimizer = optim.Adam(filter_fn, lr=args.lr, weight_decay=weight_decay, amsgrad=True)
+        optimizer = optim.Adam(filter_fn, lr=args.lr, weight_decay=weight_decay)
     elif args.opt == 'sgd':
         optimizer = optim.SGD(filter_fn, lr=args.lr, momentum=0.95, weight_decay=weight_decay)
     elif args.opt == 'rmsprop':
@@ -179,12 +178,12 @@ def train(dataset, supernode_indices, device, args):
 
     #Build the data loader
     #Split the dataset into training and validation sets
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
-    #data = dataset.to(device)
+    # train_size = int(0.8 * len(dataset))
+    # test_size = len(dataset) - train_size
+    # train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    # train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    # test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
+    data = dataset.to(device)
 
 
 
@@ -206,7 +205,7 @@ def train(dataset, supernode_indices, device, args):
     #loss_fn = nn.CrossEntropyLoss()
 
     #Define a pandas dataframe to store the training results
-    df = pd.DataFrame(columns=['epoch', 'loss', 'accuracy', 'test_loss', 'test_accuracy'])
+    #df = pd.DataFrame(columns=['epoch', 'loss', 'accuracy', 'test_loss', 'test_accuracy'])
 
 
     #Train the model
@@ -216,50 +215,46 @@ def train(dataset, supernode_indices, device, args):
         total_loss = 0
         accuracy = 0
         num_batches = 0
-        for data in train_loader:
-            data = data.to(device)
-            optimizer.zero_grad()
-            out = model(data, supernode_indices, device)
-            loss = loss_fn(out, data.y)
-            total_loss += loss.item()
-            num_batches += 1
-            #Add to the accuracy the number of correct binary predictions
-            accuracy += 0#(out.round(decimals=0) == data.y).sum().item()/len(data.y)
+        #for data in train_loader:
+        data = data.to(device)
+        optimizer.zero_grad()
+        out = model(data, supernode_indices, device)
+        loss = loss_fn(out, data.y)
+        total_loss += loss.item()
+        num_batches += 1
+        #Add to the accuracy the number of correct binary predictions
+        accuracy += 0#(out.round(decimals=0) == data.y).sum().item()/len(data.y)
 
-            loss.backward()
-            optimizer.step()
+        loss.backward()
+        optimizer.step()
+
+        print('Epoch: {:03d}, Train Loss: {:.7f}, Train Accuracy: {:.3}'.format(epoch, total_loss/num_batches, accuracy/num_batches))
 
         if scheduler is not None:
             scheduler.step()
 
-        #Find the performance on the test set
-        model.eval()
-        test_accuracy = 0
-        test_loss = 0
-        test_num_batches = 0
-        for data in test_loader:
-            data = data.to(device)
-            out = model(data, supernode_indices, device)
-            test_loss += loss_fn(out, data.y).item()
-            test_accuracy += 0#(out.round(decimals=0) == data.y).sum().item()/len(data.y)
-            test_num_batches += 1
+        # #Find the performance on the test set
+        # model.eval()
+        # test_accuracy = 0
+        # test_loss = 0
+        # test_num_batches = 0
+        # for data in test_loader:
+        #     data = data.to(device)
+        #     out = model(data, supernode_indices, device)
+        #     test_loss += loss_fn(out, data.y).item()
+        #     test_accuracy += (out.round(decimals=0) == data.y).sum().item()/len(data.y)
+        #     test_num_batches += 1
 
-        print('Epoch: {:03d}, Train Loss: {:.7f}, Train Accuracy: {:.3}, Test Loss: {:.7f}, Test Accuracy: {:.3}'.format(epoch, 
-               total_loss/num_batches, accuracy/num_batches, test_loss/test_num_batches, test_accuracy/test_num_batches))
+        # print('Epoch: {:03d}, Train Loss: {:.7f}, Train Accuracy: {:.3}, Test Loss: {:.7f}, Test Accuracy: {:.3}'.format(epoch, 
+        #        total_loss/num_batches, accuracy/num_batches, test_loss/test_num_batches, test_accuracy/test_num_batches))
 
-        #Store the results in the dataframe
-        df = pd.concat([df, pd.DataFrame({'epoch': epoch, 'loss': total_loss/num_batches, 
-                                          'accuracy': accuracy/num_batches, 'test_loss': test_loss/test_num_batches,
-                                          'test_accuracy': test_accuracy/test_num_batches
-                                          }, index=[0])], ignore_index=True)
-        #Save the dataframe to a csv file
-        df.to_csv('results_amsgrad2.csv', index=False)
-
-        if(epoch==0):
-            best_loss = test_loss/test_num_batches
-        if(test_loss/test_num_batches < best_loss):
-            best_loss = test_loss/test_num_batches
-            torch.save(model.state_dict(), 'model_amsgrad2.pt')
+        # #Store the results in the dataframe
+        # df = pd.concat([df, pd.DataFrame({'epoch': epoch, 'loss': total_loss/num_batches, 
+        #                                   'accuracy': accuracy/num_batches, 'test_loss': test_loss/test_num_batches,
+        #                                   'test_accuracy': test_accuracy/test_num_batches
+        #                                   }, index=[0])], ignore_index=True)
+        # #Save the dataframe to a csv file
+        # df.to_csv('results.csv', index=False)
 
 
 class objectview(object):
@@ -276,7 +271,7 @@ for args in [
         'super_nlp_hidden_dim_2': 32,
         'num_layers': 5,
         'batch_size':25,
-        'epochs': 500,
+        'epochs': 100,
         'opt': 'adam',
         'opt_scheduler': 'none',
         'lr': 0.001,
@@ -290,9 +285,10 @@ for args in [
 
 
 
-dataset = torch.load('/workspace/data_gen/pupil_xcoord_graphs.pt')
+dataset = torch.load('/workspace/data_gen/pupil_xcoord_graphs.pt')[0]
 
-first_graph = dataset[0]
+#first_graph = dataset[0]
+first_graph = dataset
 
 #Find the supernode indices
 random_indices = np.random.choice(first_graph.edge_index.shape[-1], size=args.num_supernodes, replace=False)
