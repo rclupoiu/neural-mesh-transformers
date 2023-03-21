@@ -108,7 +108,7 @@ for i in range(dataset_size):
     curr_x_coord = filtered_pupil_x_coords[curr_frame]
     curr_y_coord = filtered_pupil_y_coords[curr_frame]
 
-    graph_label = torch.tensor([curr_x_coord, curr_y_coord], dtype=torch.float).unsqueeze(-1)
+    graph_label = torch.tensor([curr_x_coord, curr_y_coord], dtype=torch.float).unsqueeze(0)
 
     # if(curr_x_coord < left_coord_threshold):
     #     graph_label = torch.tensor([0], dtype=torch.float).unsqueeze(-1)

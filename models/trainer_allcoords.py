@@ -148,8 +148,6 @@ class neuralGNN(torch.nn.Module):
         #Apply sigmoid for binary classification
         #pred = torch.sigmoid(pred)
 
-        import pdb; pdb.set_trace()
-
         return pred
 
 
@@ -224,7 +222,6 @@ def train(dataset, supernode_indices, device, args):
             data = data.to(device)
             optimizer.zero_grad()
             out = model(data, supernode_indices, device)
-            import pdb; pdb.set_trace()
             loss = loss_fn(out, data.y)
             total_loss += loss.item()
             num_batches += 1
