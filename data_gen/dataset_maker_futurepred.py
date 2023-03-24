@@ -79,40 +79,42 @@ eligible_frames = np.arange(frame_window, len(pupil_x_coords))
 
 print("Collecting Data...")
 
-num_left = 0
-num_right = 0
+# num_left = 0
+# num_right = 0
 
-# #Filter the x coordinates to remove nan values
-# pupil_x_coords = pupil_x_coords[~np.isnan(pupil_x_coords)]
+# # #Filter the x coordinates to remove nan values
+# # pupil_x_coords = pupil_x_coords[~np.isnan(pupil_x_coords)]
+
+# # #Normalize the x coordinates to have a mean of 0 and a standard deviation of 1
+# # pupil_x_coords = (pupil_x_coords - np.mean(pupil_x_coords)) / np.std(pupil_x_coords)
+
+# # Remove values from x coordinates at indices where either x or y coordinates are nan
+# filtered_pupil_x_coords = pupil_x_coords[~np.isnan(pupil_x_coords) & ~np.isnan(pupil_y_coords)]
+# # Do the same for y coordinates
+# filtered_pupil_y_coords = pupil_y_coords[~np.isnan(pupil_x_coords) & ~np.isnan(pupil_y_coords)]
 
 # #Normalize the x coordinates to have a mean of 0 and a standard deviation of 1
-# pupil_x_coords = (pupil_x_coords - np.mean(pupil_x_coords)) / np.std(pupil_x_coords)
+# filtered_pupil_x_coords = (filtered_pupil_x_coords - np.mean(filtered_pupil_x_coords)) / np.std(filtered_pupil_x_coords)
 
-# Remove values from x coordinates at indices where either x or y coordinates are nan
-filtered_pupil_x_coords = pupil_x_coords[~np.isnan(pupil_x_coords) & ~np.isnan(pupil_y_coords)]
-# Do the same for y coordinates
-filtered_pupil_y_coords = pupil_y_coords[~np.isnan(pupil_x_coords) & ~np.isnan(pupil_y_coords)]
-
-#Normalize the x coordinates to have a mean of 0 and a standard deviation of 1
-filtered_pupil_x_coords = (filtered_pupil_x_coords - np.mean(filtered_pupil_x_coords)) / np.std(filtered_pupil_x_coords)
-
-#Normalize the y coordinates to have a mean of 0 and a standard deviation of 1
-filtered_pupil_y_coords = (filtered_pupil_y_coords - np.mean(filtered_pupil_y_coords)) / np.std(filtered_pupil_y_coords)
+# #Normalize the y coordinates to have a mean of 0 and a standard deviation of 1
+# filtered_pupil_y_coords = (filtered_pupil_y_coords - np.mean(filtered_pupil_y_coords)) / np.std(filtered_pupil_y_coords)
 
 for i in range(dataset_size):
 
     curr_frame = eligible_frames[i]
 
-    node_attr = torch.tensor(compressed_neuron_data[:,curr_frame-frame_window:curr_frame+1], dtype=torch.float)
+    node_attr = torch.tensor(compressed_neuron_data[:,curr_frame-frame_window:curr_frame], dtype=torch.float)
+
+    y = torch.tensor(compressed_neuron_data[:,curr_frame+1], dtype=torch.float).unsqueeze(-1)
 
     #Define the graph label as the current frame's direction of the pupil in the x direction
     #If the x coordinate of the pupil is less than left_coord_threshold, the direction is left, denoted by 0
     #If the x coordinate of the pupil is greater than right_coord_threshold, the direction is right, denoted by 1
 
-    curr_x_coord = filtered_pupil_x_coords[curr_frame]
-    curr_y_coord = filtered_pupil_y_coords[curr_frame]
+    # curr_x_coord = filtered_pupil_x_coords[curr_frame]
+    # curr_y_coord = filtered_pupil_y_coords[curr_frame]
 
-    graph_label = torch.tensor([curr_x_coord, curr_y_coord], dtype=torch.float).unsqueeze(0)
+    # graph_label = torch.tensor([curr_x_coord, curr_y_coord], dtype=torch.float).unsqueeze(0)
 
     # if(curr_x_coord < left_coord_threshold):
     #     graph_label = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
@@ -124,10 +126,10 @@ for i in range(dataset_size):
     #     graph_label = torch.tensor([-1], dtype=torch.float).unsqueeze(-1)
     #     print("WARNING: Pupil located in the middle")
 
-    data_list.append(Data(x=node_attr, edge_index=edge_index, edge_attr=edge_attr, y=graph_label))
+    data_list.append(Data(x=node_attr, edge_index=edge_index, edge_attr=edge_attr, y=y))
 
 print("Saving Data...")
 
-torch.save(data_list, 'pupil_allcoords_graphs.pt')
+torch.save(data_list, 'futurepred_graphs.pt')
 
 print("Done Saving Data!")

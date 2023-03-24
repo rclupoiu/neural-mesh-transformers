@@ -255,13 +255,13 @@ def train(dataset, supernode_indices, device, args):
                                           'test_accuracy': test_accuracy/test_num_batches
                                           }, index=[0])], ignore_index=True)
         #Save the dataframe to a csv file
-        df.to_csv('results_allcoords_baseline.csv', index=False)
+        df.to_csv('results_allcoords_baseline_2.csv', index=False)
 
         if(epoch==0):
             best_loss = test_loss/test_num_batches
         if(test_loss/test_num_batches < best_loss):
             best_loss = test_loss/test_num_batches
-            torch.save(model.state_dict(), 'model_allcoords_baseline.pt')
+            torch.save(model.state_dict(), 'model_allcoords_baseline_2.pt')
 
 class objectview(object):
         def __init__(self, d):

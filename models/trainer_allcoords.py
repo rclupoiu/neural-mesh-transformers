@@ -293,21 +293,24 @@ if __name__ == '__main__':
 
     dataset = torch.load('/workspace/data_gen/pupil_allcoords_graphs.pt')
 
-    first_graph = dataset[0]
+    # first_graph = dataset[0]
 
-    #Find the supernode indices
-    random_indices = np.random.choice(first_graph.edge_index.shape[-1], size=args.num_supernodes, replace=False)
-    supernode_indices = first_graph.edge_index[0,random_indices]
+    # #Find the supernode indices
+    # random_indices = np.random.choice(first_graph.edge_index.shape[-1], size=args.num_supernodes, replace=False)
+    # supernode_indices = first_graph.edge_index[0,random_indices]
 
-    #remove duplicate nodes
-    supernode_indices = np.unique(supernode_indices.cpu().numpy())
+    # #remove duplicate nodes
+    # supernode_indices = np.unique(supernode_indices.cpu().numpy())
 
-    final_num_supernodes = len(supernode_indices)
+    # final_num_supernodes = len(supernode_indices)
 
-    print("Number of supernodes: %d" % final_num_supernodes)
+    # print("Number of supernodes: %d" % final_num_supernodes)
 
-    #Save the supernode indices
-    np.save('supernode_indices_allcoords.npy', supernode_indices)
+    # #Save the supernode indices
+    # np.save('supernode_indices_allcoords.npy', supernode_indices)
+
+    #Load the supernode indices
+    supernode_indices = np.load('supernode_indices_allcoords.npy')
 
     #dataset.y = torch.tensor([0], dtype=torch.float).unsqueeze(-1)
     # for i, data in enumerate(dataset):
